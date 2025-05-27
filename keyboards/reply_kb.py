@@ -4,7 +4,8 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 def get_main_menu_kb():
     kb = [
         [KeyboardButton(text="Создать заявку")],
-        [KeyboardButton(text="Проверить статус заявок")]
+        [KeyboardButton(text="Проверить статус заявок")],
+        [KeyboardButton(text="Помощь")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
