@@ -14,3 +14,5 @@ class ClaimRepair(StatesGroup):
     datetime = State()
     executor_name = State()
     executor_position = State()
+    confirmation = State()
+

@@ -1,10 +1,11 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
 
 import config
 from glpi_api import connect
+from keyboards.inline_kb import get_main_menu_kb, get_retry_or_main_menu_kb
 
 router = Router()
 
@@ -14,11 +15,10 @@ class StatusCheck(StatesGroup):
     ticket_id = State()  # Состояние — ожидаем ID заявки
 
 
-# === Обработчик команды "Проверить статус заявок" ===
-@router.message(F.text == "Проверить статус заявок")
+@router.message(F.text == "Проверить статус заявки")
 async def request_ticket_id(message: Message, state: FSMContext):
     await state.set_state(StatusCheck.ticket_id)
-    await message.answer("Введите ID заявки для проверки:")
+    await message.answer("Введите номер заявки для проверки:")
 
 
 # === Получение ID и запрос в GLPI ===
@@ -27,7 +27,7 @@ async def get_ticket_status(message: Message, state: FSMContext):
     ticket_id = message.text.strip()
 
     if not ticket_id.isdigit():
-        await message.answer("❌ Неверный формат. Введите число — ID заявки.")
+        await message.answer("❌ Неверный формат. Введите число — номер заявки.")
         return
 
     try:
@@ -35,7 +35,10 @@ async def get_ticket_status(message: Message, state: FSMContext):
             ticket = glpi.get_item("Ticket", int(ticket_id))
 
             if ticket is None:
-                await message.answer(f"❌ Заявка с ID {ticket_id} не найдена.")
+                await message.answer(
+                    f"❌ Заявка с номером {ticket_id} не найдена.",
+                    reply_markup=get_retry_or_main_menu_kb()
+                )
                 return
 
             # Получаем основные поля заявки
@@ -61,13 +64,26 @@ async def get_ticket_status(message: Message, state: FSMContext):
                 f"📌 Тема: {name}\n"
                 f"📅 Создано: {date_creation}\n"
                 f"✅ Статус: {status_name}\n"
-                f"📝 Описание: {content[:5000]}..."
+                f"📝 Описание: {content}..."
             )
-            await message.answer(response, parse_mode="HTML")
+            await message.answer(response, parse_mode="HTML", reply_markup=get_retry_or_main_menu_kb())
 
     except Exception as e:
-        await message.answer("❌ Не удалось получить данные из GLPI.")
+        await message.answer(
+            "❌ Не удалось получить данные из GLPI.",
+            reply_markup=get_retry_or_main_menu_kb()
+        )
         print("Ошибка при получении заявки:", e)
+        return
 
     finally:
         await state.clear()
+
+
+# === Обработка выбора пользователя после ошибки ===
+@router.callback_query(F.data == "retry_ticket_id")
+async def retry_ticket_input(callback_query: CallbackQuery, state: FSMContext):
+    await state.set_state(StatusCheck.ticket_id)
+    await callback_query.message.edit_text("Введите номер заявки для проверки:")
+    await callback_query.answer()
+
