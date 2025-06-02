@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import datetime as dt_datetime
 from typing import Union
@@ -14,6 +15,12 @@ from utils.helpers import load_train_list
 
 router = Router()
 
+# Инициализация логгера
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 # Константы
 ITEMS_PER_PAGE = 5
 PROBLEMS_REPAIR = [
@@ -47,10 +54,9 @@ async def show_repair_summary(message: Union[Message, CallbackQuery], state: FSM
         f"Поезд №: {data.get('train_number', '-')}\n"
         f"Номер вагона: {data.get('wagon_number', '-')}\n"
         f"Серийный номер вагона: {data.get('wagon_sn', '-')}\n"
-        f"Оборудование: {data.get('equipment_in', '-')}\n"
         f"Проблемы: {', '.join(problem_types) if problem_types else '-'}\n"
         f"Место проведения работ: {data.get('location', '-')}\n"
-        f"Дата и время нахождения состава в депо: {data.get('datetime', '-')}"
+        f"Ответственный сотрудник: {data.get('executor_name', '-')}"
     )
 
     confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -176,8 +182,10 @@ async def select_train(callback: CallbackQuery, state: FSMContext):
 async def search_train(message: Message, state: FSMContext):
     """Поиск поезда по части номера"""
     query = message.text.strip().upper()
+
     trains = load_train_list()
     results = [t for t in trains if t.upper().startswith(query)]
+    logger.info(trains)
 
     if not results:
         await message.answer("❌ По вашему запросу поездов не найдено.")
@@ -206,36 +214,26 @@ async def repair_wagon_sn(message: Message, state: FSMContext):
 
 
 @router.message(ClaimRepair.wagon_sn)
-async def repair_equipment_in(message: Message, state: FSMContext):
+async def repair_wagon_sn(message: Message, state: FSMContext):
     """Обработка серийного номера вагона"""
     if not await process_common_field(
             message, state,
-            "wagon_sn", ClaimRepair.equipment_in,
+            "wagon_sn", ClaimRepair.problem_types, # Изменено на ClaimRepair.problem_types
             lambda x: len(x) >= 6, "❌ Серийный номер должен содержать не менее 6 символов."
     ):
         return
 
-    await message.answer("Введите инвентарный номер оборудования:", reply_markup=get_cancel_kb())
-
-
-@router.message(ClaimRepair.equipment_in)
-async def repair_problem_type(message: Message, state: FSMContext):
-    """Обработка инвентарного номера оборудования"""
-    if not await process_common_field(
-            message, state,
-            "equipment_in", None,
-            None, None
-    ):
-        return
-
+    # Удален переход на ввод инвентарного номера оборудования
     data = await state.get_data()
-    await state.set_state(ClaimRepair.problem_types)
     selected = data.get("selected_problems", [])
 
     await message.answer(
         "Выберите одну или несколько проблем:",
         reply_markup=get_checkbox_kb_with_other(PROBLEMS_REPAIR, selected, prefix="repair")
     )
+
+
+# Удалена функция @router.message(ClaimRepair.equipment_in) async def repair_problem_type(...)
 
 
 @router.callback_query(F.data == "repair_other_manual")
@@ -328,58 +326,14 @@ async def handle_location(callback: CallbackQuery, state: FSMContext):
         await state.update_data(editing=False)
         await show_repair_summary(callback, state)
     else:
-        await state.set_state(ClaimRepair.date)
-        await callback.message.edit_text("📅 Введите дату нахождения состава в депо в формате дд.мм.гггг:")
+        await state.set_state(ClaimRepair.executor_name) # Изменено на ClaimRepair.executor_name
+        await callback.message.edit_text("ФИО исполнителя:") # Изменено на запрос ФИО исполнителя
 
     await callback.answer()
 
 
-@router.message(ClaimRepair.date)
-async def process_date_input(message: Message, state: FSMContext):
-    date_str = message.text.strip()
-    try:
-        # Парсим дату
-        date_obj = dt_datetime.strptime(date_str, "%d.%m.%Y").date()
-        formatted_date = date_obj.strftime("%d.%m.%Y")
-        await state.update_data(date=formatted_date)
+# Удалены функции process_date_input и enter_custom_time
 
-        data = await state.get_data()
-        if 'datetime' in data:
-            _, time_part = data['datetime'].split(' ', 1) if ' ' in data['datetime'] else ('', '')
-            new_datetime = f"{formatted_date} {time_part}" if time_part else formatted_date
-            await state.update_data(datetime=new_datetime)
-
-        # Переводим пользователя на ввод времени вручную
-        await state.set_state(ClaimRepair.time)
-        await message.answer(f"📅 Дата выбрана: {formatted_date}\n⏰ Введите время в формате чч:мм (например, 08:30):")
-
-    except ValueError:
-        await message.answer("❌ Неверный формат даты. Введите дату в формате дд.мм.гггг:")
-
-
-
-@router.message(ClaimRepair.time)
-async def enter_custom_time(message: Message, state: FSMContext):
-    """Обработка ручного ввода времени"""
-    time = message.text.strip()
-
-    # Проверяем формат времени (чч:мм, часы 00-23, минуты 00-59)
-    if not re.match(r"^(?:[01]\d|2[0-3]):[0-5]\d$", time):
-        await message.answer(
-            "❌ Неверный формат времени. Используйте чч:мм (например, 08:30 или 14:45)."
-        )
-        return
-
-    data = await state.get_data()
-    full_datetime = f"{data['date']} {time}"
-    await state.update_data(datetime=full_datetime)
-
-    if data.get('editing'):
-        await state.update_data(editing=False)
-        await show_repair_summary(message, state)
-    else:
-        await state.set_state(ClaimRepair.executor_name)
-        await message.answer("ФИО исполнителя:")
 
 @router.message(ClaimRepair.executor_name)
 async def repair_executor_position(message: Message, state: FSMContext):
@@ -392,23 +346,24 @@ async def repair_executor_position(message: Message, state: FSMContext):
 async def finish_repair(callback: CallbackQuery, state: FSMContext):
     """Создание заявки в GLPI"""
     data = await state.get_data()
+    logger.info("Начинаем создание заявки в GLPI", extra={"data": data})
 
     try:
         with connect(config.GLPI_URL, config.GLPI_APP_TOKEN, config.GLPI_USER_TOKEN, False) as glpi:
+            logger.debug("Успешно подключились к GLPI API")
+
             content = (
                 f"Заявка создана через Telegram\n"
                 "#телеграм\n"
                 f"Поезд: {data['train_number']}\n"
                 f"Вагон: {data['wagon_number']}\n"
                 f"Серийный номер вагона: {data['wagon_sn']}\n"
-                f"Инвентарный номер оборудования: {data['equipment_in']}\n"
                 f"Проблемы: {', '.join(data['problem_types'])}\n"
                 f"Место: {data['location']}\n"
-                f"Дата и время нахождения состава в депо: {data['datetime']}\n"
-                f"Ответственный сотрудник: {data['executor_name']})"
+                f"Ответственный сотрудник: {data['executor_name']}"
             )
 
-            ticket_result = glpi.add("Ticket", {
+            ticket_data = {
                 "name": "API GLPI - Восстановление работы",
                 "content": content,
                 "urgency": 4,
@@ -419,21 +374,26 @@ async def finish_repair(callback: CallbackQuery, state: FSMContext):
                 "itilcategories_id": 39,
                 "entities_id": 0,
                 "_users_id_observer": [22]
-            })
+            }
+
+            logger.debug("Отправляем данные в GLPI", extra={"ticket_data": ticket_data})
+            ticket_result = glpi.add("Ticket", ticket_data)
 
             ticket_id = ticket_result[0]['id']
-            claim_info = (
-                "✅ Заявка успешно создана в системе GLPI!\n"
-                f"🔢 Номер заявки: {ticket_id}\n"
-                f"📝 Тема: {data['problem_types'][0]}\n"
-                f"📍 Поезд: {data['train_number']}, Вагон: {data['wagon_number']}"
-            )
+            logger.info(f"Заявка успешно создана в GLPI", extra={"ticket_id": ticket_id})
 
-            await callback.message.edit_text(claim_info, reply_markup=get_return_main_menu_kb())
-            await callback.answer()
+            await callback.message.answer(
+                f"✅ Заявка №{ticket_id} успешно создана в GLPI!\n\n"
+                f"Поезд: {data['train_number']}\n"
+                f"Вагон: {data['wagon_number']}\n"
+                f"Серийный номер вагона: {data['wagon_sn']}",
+                reply_markup=get_return_main_menu_kb()
+            )
             await state.clear()
+
     except Exception as e:
-        await callback.message.answer(
-            "❌ Не удалось создать заявку в GLPI.\nПопробуйте позже.",
-            reply_markup=get_return_main_menu_kb()
-        )
+        logger.error("Ошибка при создании заявки в GLPI", exc_info=True)
+        await callback.message.answer(f"❌ Произошла ошибка при создании заявки: {e}")
+        await state.clear()
+
+    await callback.answer()

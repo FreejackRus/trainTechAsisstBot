@@ -5,7 +5,6 @@ class ClaimRepair(StatesGroup):
     train_number = State()
     wagon_number = State()
     wagon_sn = State()
-    equipment_in = State()
     problem_types = State()  # Теперь список
     problem_other = State()  # Для ручного ввода
     location = State()

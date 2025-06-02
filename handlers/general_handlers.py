@@ -18,7 +18,7 @@ router = Router()
 async def start(message: Message, state: FSMContext):
     await state.clear()
     logger.info("Команда /start получена")
-    await message.answer("🤖 Добро пожаловать в бот технической поддержки Peremena!\n\n", reply_markup=get_main_menu_kb())
+    await message.answer("🤖 Добро пожаловать в бот технической поддержки!\n\n", reply_markup=get_main_menu_kb())
 
 
 # === Создать заявку ===
