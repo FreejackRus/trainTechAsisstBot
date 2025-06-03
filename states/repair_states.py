@@ -7,10 +7,6 @@ class ClaimRepair(StatesGroup):
     wagon_sn = State()
     problem_types = State()  # Теперь список
     problem_other = State()  # Для ручного ввода
-    location = State()
-    date = State()
-    time = State()
-    datetime = State()
     executor_name = State()
     executor_position = State()
     confirmation = State()

@@ -20,14 +20,25 @@ def get_return_main_menu_kb():
 def get_claim_type_kb():
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="Переоснащение v1", callback_data="claim_type_equipment_v1"),
-        InlineKeyboardButton(text="Переоснащение v2 (с документом)", callback_data="claim_type_equipment_v2")
+        InlineKeyboardButton(text="Переоснащение", callback_data="main_menu_renewal")
     )
     builder.row(
         InlineKeyboardButton(text="Восстановление работы", callback_data="claim_type_restoration")
     )
     builder.row(
         InlineKeyboardButton(text="Проверить статус заявки", callback_data="main_menu_check_status")
+    )
+    return builder.as_markup()
+
+# === Новая клавиатура для переоснащения ===
+def get_renewal_menu_kb():
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="Переоснащение вагона", callback_data="claim_type_equipment_v1"),
+        InlineKeyboardButton(text="Переоснащение нескольких вагонов", callback_data="claim_type_equipment_v2")
+    )
+    builder.row(
+        InlineKeyboardButton(text="Вернуться в главное меню", callback_data="main_menu_start")
     )
     return builder.as_markup()
 

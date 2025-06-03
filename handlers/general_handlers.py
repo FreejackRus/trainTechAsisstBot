@@ -3,7 +3,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 
-from keyboards.inline_kb import get_main_menu_kb, get_claim_type_kb, get_cancel_kb
+from keyboards.inline_kb import get_main_menu_kb, get_claim_type_kb, get_cancel_kb, get_renewal_menu_kb
 
 import logging
 
@@ -26,14 +26,23 @@ async def start(message: Message, state: FSMContext):
 async def create_claim(callback: CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
     if current_state:
-        await callback.answer("Сначала завершите или отмените текущую заявку.", show_alert=True)
+        await callback.answer("Сначала завершите или отмен  ите текущую заявку.", show_alert=True)
         return
 
     try:
-        await callback.message.edit_text("Выберите тип заявки:", reply_markup=get_claim_type_kb())
+        await callback.message.answer("Выберите тип заявки:", reply_markup=get_claim_type_kb())
         await callback.answer()
     except Exception as e:
         logger.error(f"[create_claim] Ошибка при изменении сообщения: {e}")
+        await callback.answer("Ошибка. Попробуйте позже.", show_alert=True)
+
+@router.callback_query(F.data == "main_menu_renewal")
+async def renewal_menu(callback: CallbackQuery):
+    try:
+        await callback.message.edit_text("Выберите тип переоснащения:", reply_markup=get_renewal_menu_kb())
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"[renewal_menu] Ошибка при изменении сообщения: {e}")
         await callback.answer("Ошибка. Попробуйте позже.", show_alert=True)
 
 

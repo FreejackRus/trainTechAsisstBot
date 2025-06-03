@@ -11,7 +11,7 @@ import config
 from glpi_api import connect
 from keyboards.inline_kb import get_checkbox_kb_with_other, get_cancel_kb, get_return_main_menu_kb
 from states.repair_states import ClaimRepair
-from utils.helpers import load_train_list
+from utils.helpers import load_train_list, is_wagon_sn_valid
 
 router = Router()
 
@@ -27,11 +27,6 @@ PROBLEMS_REPAIR = [
     "Недоступен портал",
     "Недоступна wi-fi сеть «Таврия.Медиа»",
 ]
-LOCATIONS = {
-    "location_moscow": "Москва",
-    "location_spb": "Санкт-Петербург",
-    "location_simferopol": "Симферополь"
-}
 DEFAULT_TIMES = ["09:00", "10:00", "11:00", "12:00"]
 
 
@@ -42,8 +37,10 @@ async def show_repair_summary(message: Union[Message, CallbackQuery], state: FSM
 
     data = await state.get_data()
     problem_types = data.get("problem_types", [])
+
     if not problem_types and "selected_problems" in data:
         problem_types = [PROBLEMS_REPAIR[i] for i in data["selected_problems"] if i < len(PROBLEMS_REPAIR)]
+
     if data.get("manual_problem"):
         problem_types.append(data["manual_problem"])
 
@@ -55,8 +52,6 @@ async def show_repair_summary(message: Union[Message, CallbackQuery], state: FSM
         f"Номер вагона: {data.get('wagon_number', '-')}\n"
         f"Серийный номер вагона: {data.get('wagon_sn', '-')}\n"
         f"Проблемы: {', '.join(problem_types) if problem_types else '-'}\n"
-        f"Место проведения работ: {data.get('location', '-')}\n"
-        f"Ответственный сотрудник: {data.get('executor_name', '-')}"
     )
 
     confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -94,7 +89,7 @@ async def show_train_page(callback: CallbackQuery, state: FSMContext, page: int)
         keyboard_buttons.append(nav_buttons)
 
     # Отправляем новое сообщение вместо редактирования
-    await callback.message.answer(
+    await callback.message.edit_reply_markup(
         "Выберите номер поезда:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
     )
@@ -111,6 +106,21 @@ async def process_common_field(message: Message, state: FSMContext,
         return False
 
     await state.update_data({field_name: value})
+    logger.info(
+        f"State data after update for {field_name}: {await state.get_data()}")  # Updated logging to get current data
+
+    # Display the confirmation message for the current field
+
+    if field_name == "wagon_number":
+        await message.answer(f"✅ Номер вагона: {value}")
+    elif field_name == "wagon_sn":
+        await message.answer(f"✅ Серийный номер вагона: {value}")
+    elif field_name == "selected_problems":
+        await message.answer(f"✅ Выбранные проблемы: {value}")
+    elif field_name == "manual_problem":
+        await message.answer(f"✅ Проблема (вручную): {value}")
+
+
     data = await state.get_data()
 
     if data.get('editing'):
@@ -167,11 +177,13 @@ async def select_train(callback: CallbackQuery, state: FSMContext):
     """Выбор поезда из списка"""
     train_number = callback.data.split("_", 1)[1]
     await state.update_data(train_number=train_number)
+    await callback.message.answer(f"✅ Номер поезда: {train_number}") # Added line
     data = await state.get_data()
 
     if data.get('editing'):
         await show_repair_summary(callback, state)
     else:
+
         await state.set_state(ClaimRepair.wagon_number)
         await callback.message.answer("Введите номер вагона:", reply_markup=get_cancel_kb())
 
@@ -182,10 +194,8 @@ async def select_train(callback: CallbackQuery, state: FSMContext):
 async def search_train(message: Message, state: FSMContext):
     """Поиск поезда по части номера"""
     query = message.text.strip().upper()
-
     trains = load_train_list()
     results = [t for t in trains if t.upper().startswith(query)]
-    logger.info(trains)
 
     if not results:
         await message.answer("❌ По вашему запросу поездов не найдено.")
@@ -215,12 +225,18 @@ async def repair_wagon_sn(message: Message, state: FSMContext):
 
 @router.message(ClaimRepair.wagon_sn)
 async def repair_wagon_sn(message: Message, state: FSMContext):
+    wagon_sn = message.text.strip()
+
     """Обработка серийного номера вагона"""
     if not await process_common_field(
             message, state,
             "wagon_sn", ClaimRepair.problem_types, # Изменено на ClaimRepair.problem_types
             lambda x: len(x) >= 6, "❌ Серийный номер должен содержать не менее 6 символов."
     ):
+        return
+    # Проверка наличия в базе (в файле)
+    if not await is_wagon_sn_valid(wagon_sn):
+        await message.answer("❌ Вагон с таким серийным номером не найден в базе.")
         return
 
     # Удален переход на ввод инвентарного номера оборудования
@@ -260,15 +276,7 @@ async def repair_manual_problem(message: Message, state: FSMContext):
         selected.append(len(PROBLEMS_REPAIR) - 1)
 
     await state.update_data(selected_problems=selected)
-    await state.set_state(ClaimRepair.location)
-
-    await message.answer(
-        "Выберите место проведения работ:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=loc, callback_data=key)]
-            for key, loc in LOCATIONS.items()
-        ])
-    )
+    await state.set_state(ClaimRepair.executor_name)
 
 
 @router.callback_query(F.data.regexp(r"^repair_check_\d+$"))
@@ -283,7 +291,9 @@ async def handle_repair_check(callback: CallbackQuery, state: FSMContext):
     else:
         selected.append(index)
 
+
     await state.update_data(selected_problems=selected)
+    
     await callback.message.edit_reply_markup(
         reply_markup=get_checkbox_kb_with_other(PROBLEMS_REPAIR, selected, prefix="repair")
     )
@@ -305,34 +315,11 @@ async def finish_repair_problems(callback: CallbackQuery, state: FSMContext):
         await state.update_data(editing=False)
         await show_repair_summary(callback, state)
     else:
-        await state.set_state(ClaimRepair.location)
-        await callback.message.edit_text("Выберите место проведения работ:")
-        await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=loc, callback_data=key)]
-            for key, loc in LOCATIONS.items()
-        ]))
+        await callback.message.answer(f"✅ Проблемы: {selected_texts}")
+        await state.set_state(ClaimRepair.executor_name)
+        await callback.message.answer("ФИО исполнителя:")
 
     await callback.answer()
-
-
-@router.callback_query(F.data.startswith("location_"))
-async def handle_location(callback: CallbackQuery, state: FSMContext):
-    """Обработка выбора местоположения"""
-    location = LOCATIONS.get(callback.data, "Неизвестное место")
-    await state.update_data(location=location)
-    data = await state.get_data()
-
-    if data.get('editing'):
-        await state.update_data(editing=False)
-        await show_repair_summary(callback, state)
-    else:
-        await state.set_state(ClaimRepair.executor_name) # Изменено на ClaimRepair.executor_name
-        await callback.message.edit_text("ФИО исполнителя:") # Изменено на запрос ФИО исполнителя
-
-    await callback.answer()
-
-
-# Удалены функции process_date_input и enter_custom_time
 
 
 @router.message(ClaimRepair.executor_name)
@@ -359,7 +346,6 @@ async def finish_repair(callback: CallbackQuery, state: FSMContext):
                 f"Вагон: {data['wagon_number']}\n"
                 f"Серийный номер вагона: {data['wagon_sn']}\n"
                 f"Проблемы: {', '.join(data['problem_types'])}\n"
-                f"Место: {data['location']}\n"
                 f"Ответственный сотрудник: {data['executor_name']}"
             )
 
@@ -372,7 +358,7 @@ async def finish_repair(callback: CallbackQuery, state: FSMContext):
                 "type": 1,
                 "requesttypes_id": 1,
                 "itilcategories_id": 39,
-                "entities_id": 0,
+                "entities_id": 16,
                 "_users_id_observer": [22]
             }
 
