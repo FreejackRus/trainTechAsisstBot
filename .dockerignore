@@ -1,0 +1,31 @@
+# Игнорировать директории Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python/
+
+# Игнорировать виртуальные окружения
+virtualenv/
+virtual-env/
+venv/
+env/
+.venv/
+
+# Игнорировать файлы и директории, связанные с IDE и контролем версий
+.idea/
+.vscode/
+.git/
+.gitignore
+
+# Игнорировать файлы данных, которые не должны быть частью образа
+*.sqlite3
+*.db
+
+# Игнорировать логи
+*.log
+
+# Игнорировать файлы, созданные Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
