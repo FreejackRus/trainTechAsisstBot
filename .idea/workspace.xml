@@ -5,16 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="5489d8f3-6549-4db4-a9a7-d1587a228401" name="Changes" comment="Рабочее редактирование">
-      <change afterPath="$PROJECT_DIR$/files/Form.doc" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/files/wagons.xlsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/handlers/general_handlers.py" beforeDir="false" afterPath="$PROJECT_DIR$/handlers/general_handlers.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/handlers/repair_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/handlers/repair_handler.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/keyboards/inline_kb.py" beforeDir="false" afterPath="$PROJECT_DIR$/keyboards/inline_kb.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/states/repair_states.py" beforeDir="false" afterPath="$PROJECT_DIR$/states/repair_states.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/helpers.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/helpers.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -43,16 +36,16 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.main.executor": "Run",
-    "RunOnceActivity.OpenProjectViewOnStart": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "main",
-    "last_opened_file_path": "C:/work/telegram/vodc/trainTechAsisstBot/files",
-    "settings.editor.selected.configurable": "preferences.pluginManager"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/work/telegram/vodc/trainTechAsisstBot/files&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\work\telegram\vodc\trainTechAsisstBot\files" />
@@ -121,7 +114,31 @@
       <option name="project" value="LOCAL" />
       <updated>1748823204650</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="Рабочее редактирование">
+      <option name="closed" value="true" />
+      <created>1748959849021</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1748959849021</updated>
+    </task>
+    <task id="LOCAL-00004" summary="Рабочее редактирование">
+      <option name="closed" value="true" />
+      <created>1748959884185</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1748959884185</updated>
+    </task>
+    <task id="LOCAL-00005" summary="Рабочее редактирование">
+      <option name="closed" value="true" />
+      <created>1748960342833</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1748960342833</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

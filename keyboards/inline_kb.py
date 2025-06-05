@@ -19,9 +19,9 @@ def get_return_main_menu_kb():
 # === Типы заявок — теперь здесь наши новые кнопки ===
 def get_claim_type_kb():
     builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="Переоснащение", callback_data="main_menu_renewal")
-    )
+    # builder.row(
+    #     InlineKeyboardButton(text="Переоснащение", callback_data="main_menu_renewal")
+    # )
     builder.row(
         InlineKeyboardButton(text="Восстановление работы", callback_data="claim_type_restoration")
     )
