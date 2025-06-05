@@ -25,24 +25,29 @@ logger = logging.getLogger(__name__)
 ITEMS_PER_PAGE = 5
 PROBLEMS_REPAIR = [
     "Недоступен портал",
-    "Недоступна wi-fi сеть «Таврия.Медиа»",
-]
+    "Недоступна wi-fi сеть «Таврия.Медиа»",]
 DEFAULT_TIMES = ["09:00", "10:00", "11:00", "12:00"]
 
 
 async def show_repair_summary(message: Union[Message, CallbackQuery], state: FSMContext):
-    """Показывает сводку заявки с кнопками подтверждения"""
     if isinstance(message, CallbackQuery):
         message = message.message
-
     data = await state.get_data()
-    problem_types = data.get("problem_types", [])
 
-    if not problem_types and "selected_problems" in data:
-        problem_types = [PROBLEMS_REPAIR[i] for i in data["selected_problems"] if i < len(PROBLEMS_REPAIR)]
+    # Получаем список выбранных проблем по индексам
+    selected_indices = data.get("selected_problems", [])
+    manual_problem = data.get("manual_problem")
 
-    if data.get("manual_problem"):
-        problem_types.append(data["manual_problem"])
+    problem_types = []
+
+    # Добавляем только те проблемы, которые действительно были выбраны
+    for idx in selected_indices:
+        if 0 <= idx < len(PROBLEMS_REPAIR):
+            problem_types.append(PROBLEMS_REPAIR[idx])
+
+    # Добавляем ручную проблему, если есть
+    if manual_problem:
+        problem_types.append(manual_problem)
 
     summary = (
         "📄 *Итоговая информация о заявке*\n"
@@ -136,21 +141,26 @@ async def process_common_field(message: Message, state: FSMContext,
 @router.callback_query(F.data == "claim_type_restoration")
 async def handle_restoration(callback: CallbackQuery, state: FSMContext):
     """Обработка выбора типа заявки 'Восстановление'"""
-    # Отправляем сообщение о типе заявки
-    await callback.message.answer("🔧 Вы выбрали: Восстановление работоспособности")
+    await state.clear()  # Полная очистка состояния
 
+    # Инициализируем состояние новой заявки
+    await state.set_state(ClaimRepair.train_number)  # Можно сразу указать нужное состояние
+
+    # Загружаем список поездов и устанавливаем начальную страницу
     trains = load_train_list()
-
     if not trains:
         await callback.message.answer("❌ Список поездов пуст или не найден.")
         return
 
     await state.update_data(trains=trains, page=0)
-    # Теперь показываем страницу с поездами в новом сообщении
+
+    # Отправляем сообщение о типе заявки
+    await callback.message.answer("🔧 Вы выбрали: Восстановление работоспособности")
+
+    # Показываем первый экран с выбором поезда
     await show_train_page(callback, state, 0)
 
     await callback.answer()
-
 
 @router.callback_query(F.data.startswith("page_prev_") | F.data.startswith("page_next_"))
 async def navigate_pages(callback: CallbackQuery, state: FSMContext):
@@ -213,10 +223,19 @@ async def search_train(message: Message, state: FSMContext):
 @router.message(ClaimRepair.wagon_number)
 async def repair_wagon_sn(message: Message, state: FSMContext):
     """Обработка номера вагона"""
+    def validate_wagon(value: str) -> bool:
+        if not value.isdigit():
+            return False
+        number = int(value)
+        return 1 <= number <= 26  # Проверяем диапазон
+
     if not await process_common_field(
-            message, state,
-            "wagon_number", ClaimRepair.wagon_sn,
-            lambda x: x.isdigit(), "❌ Номер вагона должен быть числом."
+        message,
+        state,
+        "wagon_number",
+        ClaimRepair.wagon_sn,
+        validation_func=validate_wagon,
+        error_msg="❌ Номер вагона должен быть числом от 1 до 26."
     ):
         return
 
@@ -225,21 +244,34 @@ async def repair_wagon_sn(message: Message, state: FSMContext):
 
 @router.message(ClaimRepair.wagon_sn)
 async def repair_wagon_sn(message: Message, state: FSMContext):
-    wagon_sn = message.text.strip()
+    raw_input = message.text.strip()
 
-    """Обработка серийного номера вагона"""
-    if not await process_common_field(
-            message, state,
-            "wagon_sn", ClaimRepair.problem_types, # Изменено на ClaimRepair.problem_types
-            lambda x: len(x) >= 6, "❌ Серийный номер должен содержать не менее 6 символов."
-    ):
-        return
-    # Проверка наличия в базе (в файле)
+    # Автоматически форматируем, если нет пробела и длина 8
+    if ' ' not in raw_input:
+        if len(raw_input) == 8:
+            wagon_sn = f"{raw_input[:3]} {raw_input[3:]}"
+        else:
+            await message.answer(
+                "❌ Неверная длина серийного номера.\n"
+                "Введите 8 символов (например: 1123456), или с пробелом: 112 13456."
+            )
+            return
+    else:
+        wagon_sn = raw_input
+
+
+    await state.update_data(wagon_sn=wagon_sn)
+    logger.info(f"State data after wagon_sn update: {await state.get_data()}")
+
+    # Проверка наличия в базе
     if not await is_wagon_sn_valid(wagon_sn):
-        await message.answer("❌ Вагон с таким серийным номером не найден в базе.")
-        return
+        await message.answer("❌ Вагон с таким серийным номером не найден в базе.\nПроверьте правильность ввода.")
+        return  # Остаёмся в текущем состоянии
 
-    # Удален переход на ввод инвентарного номера оборудования
+    # Сохраняем отформатированный номер обратно в состояние
+    await message.answer(
+        f"✅ Серийный номер вагона: {wagon_sn} \n"
+    )
     data = await state.get_data()
     selected = data.get("selected_problems", [])
 
@@ -249,12 +281,16 @@ async def repair_wagon_sn(message: Message, state: FSMContext):
     )
 
 
-# Удалена функция @router.message(ClaimRepair.equipment_in) async def repair_problem_type(...)
-
-
 @router.callback_query(F.data == "repair_other_manual")
 async def handle_repair_other_manual(callback: CallbackQuery, state: FSMContext):
-    """Обработка ручного ввода проблемы"""
+    """Обработка выбора 'Иное' для ручного ввода"""
+    data = await state.get_data()
+    selected = data.get("selected_problems", [])
+
+    # Очищаем все ранее выбранные индексы
+    selected.clear()
+
+    await state.update_data(selected_problems=selected)
     await callback.message.answer("Введите описание проблемы вручную:")
     await state.set_state(ClaimRepair.problem_other)
     await callback.answer()
@@ -262,21 +298,29 @@ async def handle_repair_other_manual(callback: CallbackQuery, state: FSMContext)
 
 @router.message(ClaimRepair.problem_other)
 async def repair_manual_problem(message: Message, state: FSMContext):
-    """Обработка ручного описания проблемы"""
     if not await process_common_field(
-            message, state,
-            "manual_problem", None,
-            None, None
+        message,
+        state,
+        "manual_problem",
+        None,
+        None,
+        None
     ):
         return
 
     data = await state.get_data()
-    selected = data.get("selected_problems", [])
-    if len(PROBLEMS_REPAIR) > 0:
-        selected.append(len(PROBLEMS_REPAIR) - 1)
+    manual_problem = data.get("manual_problem")
 
-    await state.update_data(selected_problems=selected)
+    # Необязательно: можно оставить пустым, т.к. уже очистили в handle_repair_other_manual
+    selected = []
+    # Добавляем специальный флаг или просто текст в проблему
+    await state.update_data(
+        problem_types=[manual_problem],  # Сохраняем как основную проблему
+        selected_problems=selected
+    )
+
     await state.set_state(ClaimRepair.executor_name)
+    await message.answer("Введите ФИО исполнителя:")
 
 
 @router.callback_query(F.data.regexp(r"^repair_check_\d+$"))
@@ -285,46 +329,74 @@ async def handle_repair_check(callback: CallbackQuery, state: FSMContext):
     index = int(callback.data.split("_")[2])
     data = await state.get_data()
     selected = data.get("selected_problems", [])
+    other_index = len(PROBLEMS_REPAIR) - 1  # Индекс "Иное"
 
-    if index in selected:
-        selected.remove(index)
+    if index == other_index:
+        # Если выбрано "Иное", очищаем список от других пунктов
+        selected = [index]
     else:
-        selected.append(index)
-
+        # Если выбран другой пункт, убираем "Иное", если оно есть
+        if other_index in selected:
+            selected.remove(other_index)
+        if index in selected:
+            selected.remove(index)
+        else:
+            selected.append(index)
 
     await state.update_data(selected_problems=selected)
-    
     await callback.message.edit_reply_markup(
         reply_markup=get_checkbox_kb_with_other(PROBLEMS_REPAIR, selected, prefix="repair")
     )
 
-
 @router.callback_query(F.data == "repair_done")
 async def finish_repair_problems(callback: CallbackQuery, state: FSMContext):
-    """Завершение выбора проблем"""
     data = await state.get_data()
     selected_indices = data.get("selected_problems", [])
-    selected_texts = [PROBLEMS_REPAIR[i] for i in selected_indices if i < len(PROBLEMS_REPAIR)]
+    manual_problem = data.get("manual_problem")
+    other_index = len(PROBLEMS_REPAIR) - 1  # Индекс "Иное"
 
-    if data.get("manual_problem"):
-        selected_texts.append(data["manual_problem"])
+    problem_types = []
 
-    await state.update_data(problem_types=selected_texts)
+    if other_index in selected_indices:
+        # Если выбрано "Иное", но нет ручного ввода
+        if not manual_problem:
+            await callback.answer("❗ Введите описание проблемы вручную.", show_alert=True)
+            return
+        problem_types.append(manual_problem)
+        selected_indices = [other_index]  # Очищаем другие варианты
+    else:
+        for idx in selected_indices:
+            if 0 <= idx < len(PROBLEMS_REPAIR):
+                problem_types.append(PROBLEMS_REPAIR[idx])
+
+    if not problem_types:
+        await callback.answer("❗ Выберите хотя бы одну проблему.", show_alert=True)
+        return
+
+    await state.update_data(
+        problem_types=problem_types,
+        selected_problems=selected_indices
+    )
 
     if data.get('editing'):
         await state.update_data(editing=False)
         await show_repair_summary(callback, state)
     else:
-        await callback.message.answer(f"✅ Проблемы: {selected_texts}")
+        await callback.message.answer(f"✅ Проблемы: {', '.join(problem_types)}")
         await state.set_state(ClaimRepair.executor_name)
-        await callback.message.answer("ФИО исполнителя:")
+        await callback.message.answer("Введите ФИО исполнителя:")
 
     await callback.answer()
-
 
 @router.message(ClaimRepair.executor_name)
 async def repair_executor_position(message: Message, state: FSMContext):
     """Обработка ФИО исполнителя"""
+    name = message.text.strip()
+
+    if not validate_executor_name(name):
+        await message.answer("❌ Введите корректное ФИО (только буквы и пробелы). Пример: Иванов Иван Иванович")
+        return
+
     await state.update_data(executor_name=message.text)
     await show_repair_summary(message, state)
 
@@ -334,6 +406,15 @@ async def finish_repair(callback: CallbackQuery, state: FSMContext):
     """Создание заявки в GLPI"""
     data = await state.get_data()
     logger.info("Начинаем создание заявки в GLPI", extra={"data": data})
+
+    selected_indices = data.get("selected_problems", [])
+    manual_problem = data.get("manual_problem")
+
+    problem_types = []
+    if selected_indices:
+        problem_types = [PROBLEMS_REPAIR[i] for i in selected_indices if i < len(PROBLEMS_REPAIR)]
+    if manual_problem:
+        problem_types.append(manual_problem)
 
     try:
         with connect(config.GLPI_URL, config.GLPI_APP_TOKEN, config.GLPI_USER_TOKEN, False) as glpi:
@@ -383,3 +464,6 @@ async def finish_repair(callback: CallbackQuery, state: FSMContext):
         await state.clear()
 
     await callback.answer()
+def validate_executor_name(name: str) -> bool:
+    # Проверяем, что строка содержит только буквы и пробелы (возможно кириллицу)
+    return re.fullmatch(r'^[а-яА-ЯёЁa-zA-Z\s\-]+$', name.strip()) is not None
