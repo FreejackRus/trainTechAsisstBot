@@ -56,7 +56,7 @@ def get_checkbox_kb_with_other(options: list, selected: list = None, prefix="def
     builder.adjust(1)
     builder.row(
         InlineKeyboardButton(text="Готово", callback_data=f"{prefix}_done"),
-        InlineKeyboardButton(text="Иное (прописать)", callback_data=f"{prefix}_other_manual")
+        InlineKeyboardButton(text="Иное (прочее)", callback_data=f"{prefix}_other_manual")
     )
     return builder.as_markup()
 
