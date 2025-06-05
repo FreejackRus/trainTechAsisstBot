@@ -356,7 +356,7 @@ async def finish_repair(callback: CallbackQuery, state: FSMContext):
                 "impact": 4,
                 "priority": 4,
                 "type": 1,
-                "requesttypes_id": 1,
+                "requesttypes_id": 8,
                 "itilcategories_id": 39,
                 "entities_id": 16,
                 "_users_id_observer": [22]
